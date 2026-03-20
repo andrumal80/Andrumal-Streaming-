@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sincronizador Global Pro - Mis Cuentas</title>
+    <style>
+        body { background-color: #f0f2f5; font-family: sans-serif; padding: 20px 10px; margin: 0; }
+        .contenedor { max-width: 550px; margin: 0 auto; padding-top: 20px; }
+        .tarjeta { background: white; padding: 25px; border-radius: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); text-align: center; margin-bottom: 20px; }
+        h1 { font-size: 22px; color: #333; margin-bottom: 5px; text-transform: uppercase; }
+        p { font-size: 13px; color: #666; margin-bottom: 20px; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-size: 16px; font-weight: bold; cursor: pointer; margin-bottom: 10px; transition: 0.3s; }
+        .btn-nube { background: #007bff; color: white; }
+        .btn-bajar { background: #2d3748; color: white; }
+        .input-pin { width: 100%; padding: 15px; border: 2px solid #007bff; border-radius: 12px; font-size: 28px; text-align: center; font-weight: bold; margin-bottom: 15px; letter-spacing: 8px; box-sizing: border-box; }
+        #resultadoPIN { font-size: 35px; font-weight: bold; color: #007bff; background: #e7f1ff; padding: 15px; border-radius: 12px; margin: 15px 0; border: 2px dashed #007bff; display: none; }
+    </style>
+</head>
+<body>
+
+<div class="contenedor">
+    <div class="tarjeta">
+        <h1>☁️ Nube Maestra</h1>
+        <p>Sincronización Total de Cuentas por PIN</p>
+        <button class="btn btn-nube" onclick="subirALaNube()">📤 GENERAR PIN DE ENVÍO</button>
+        <div id="resultadoPIN">0000</div>
+        <div style="margin: 20px 0; color: #ccc;">────────────────</div>
+        <input type="number" id="pinIngreso" class="input-pin" placeholder="0000">
+        <button class="btn btn-bajar" onclick="bajarDeLaNube()">📥 RECIBIR DATOS CON PIN</button>
+    </div>
+    <p style="text-align: center; color: #999; font-size: 11px;">Mis Cuentas - Sistema de Sincronización Segura 2026</p>
+</div>
+
+<script>
+    const FIREBASE_URL = "https://mis-cuentas-a5f8a-default-rtdb.firebaseio.com/";
+
+    const LLAVES_SISTEMA = [
+        'base_netflix_jose_final',
+        'base_hbo_max_streaming',
+        'base_disney_streaming',
+        'base_disney_espn_streaming',
+        'base_prime_video_streaming',
+        'dash_disponibles_p',
+        'base_datos_pantallas',
+        'chat_maestro_global',
+        'CUENTAS_HBO_MAX_DISPONIBLES',
+        'CUENTAS_HBO_MAX_VENDIDAS',
+        'CUENTAS_DISNEY_PLUS_DISPO',
+        'CUENTAS_DISNEY_PLUS_HISTO',
+        'CUENTAS_DISNEY_ESPN_DISPO',
+        'CUENTAS_DISNEY_ESPN_HISTO',
+        'CUENTAS_PRIME_VIDEO_DISPO',
+        'CUENTAS_PRIME_VIDEO_HISTORIAL',
+        'CUENTAS_PARAMOUNT_DISPO',
+        'CUENTAS_PARAMOUNT_HISTO',
+        'CUENTAS_VIX_DISPONIBLES',
+        'CUENTAS_VIX_HISTORIAL',
+        'CUENTAS_CRUNCHYROLL_DISPO',
+        'CUENTAS_CRUNCHYROLL_HISTO',
+        'CUENTAS_PLEX_DISPO',
+        'CUENTAS_PLEX_HISTO',
+        'base_netflix_streaming',
+        'base_paramount_streaming',
+        'base_crunchyroll_streaming',
+        'base_vix_streaming',
+        'base_plex_streaming_db',
+        'CUENTAS_WIN_DISPO',
+        'CUENTAS_WIN_HISTO'
+    ];
+
+    async function subirALaNube() {
+        try {
+            let paquete = {};
+            LLAVES_SISTEMA.forEach(llave => {
+                const data = localStorage.getItem(llave);
+                paquete[llave] = data ? data : "[]";
+            });
+            const pin = Math.floor(1000 + Math.random() * 9000);
+            const respuesta = await fetch(`${FIREBASE_URL}pines/${pin}.json`, {
+                method: 'PUT',
+                body: JSON.stringify({ datos: paquete, fecha: Date.now() })
+            });
+            if (respuesta.ok) {
+                const resDiv = document.getElementById('resultadoPIN');
+                resDiv.style.display = "block";
+                resDiv.innerText = pin;
+            }
+        } catch (e) { alert("Error al subir."); }
+    }
+
+    async function bajarDeLaNube() {
+        const pin = document.getElementById('pinIngreso').value;
+        if (!pin) return alert("Ingresa el PIN.");
+        try {
+            const respuesta = await fetch(`${FIREBASE_URL}pines/${pin}.json`);
+            const data = await respuesta.json();
+            if (data && data.datos) {
+                if (confirm("⚠️ ¿Actualizar bases?")) {
+                    Object.keys(data.datos).forEach(llave => {
+                        localStorage.setItem(llave, data.datos[llave]);
+                    });
+                    alert("🚀 Sincronización Exitosa.");
+                    // SE ELIMINÓ location.reload() PARA EVITAR EL ERROR DE PÁGINA NO DISPONIBLE
+                }
+            } else { alert("PIN incorrecto."); }
+        } catch (e) { alert("Error al descargar."); }
+    }
+</script>
+</body>
+</html>
