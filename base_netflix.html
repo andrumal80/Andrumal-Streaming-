@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Base de Datos NETFLIX Pro</title>
+    <style>
+        body { background-color: #f0f2f5; font-family: sans-serif; padding: 20px 10px; margin: 0; padding-bottom: 50px; }
+        .seccion { background: white; max-width: 550px; margin: 0 auto 20px auto; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #333; font-size: 19px; text-align: center; text-transform: uppercase; }
+        
+        .contenedor-buscador { max-width: 550px; margin: 25px auto 15px auto; position: sticky; top: 10px; z-index: 100; }
+        .input-buscador { 
+            width: 100%; padding: 15px 15px 15px 45px; border: 2px solid #007bff; border-radius: 30px; font-size: 16px; outline: none; 
+            box-shadow: 0 4px 12px rgba(0,123,255,0.2);
+            background: white url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23007bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" cy="21" x2="16.65" y2="16.65"></line></svg>') no-repeat 15px center;
+        }
+
+        .tarjeta-contador { background: #eef2f7; margin: 20px auto; padding: 15px; border-radius: 12px; border: 2px solid #007bff; max-width: 550px; text-align: center; }
+        .contador-numero { font-size: 24px; font-weight: bold; color: #007bff; display: block; }
+
+        .campo { margin-bottom: 12px; text-align: left; }
+        label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        
+        .grid-fechas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+        .btn-cargar { width: 100%; padding: 15px; background-color: #000; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+
+        .historial-separado { 
+            background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 15px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-left: 10px solid #ccc; 
+            text-align: left; position: relative; 
+        }
+        .btn-borrar { position: absolute; right: 12px; top: 12px; color: #ff4d4d; background: none; border: none; cursor: pointer; font-size: 20px; font-weight: bold; }
+        
+        .vencida { border-left-color: #e74c3c !important; }
+        .vence-hoy { border-left-color: #e67e22 !important; }
+        .proxima { border-left-color: #f1c40f !important; }
+        .activa { border-left-color: #2d9d96 !important; }
+
+        .estado-texto { font-weight: bold; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 10px; }
+        .dato-linea { font-size: 14px; color: #333; margin: 5px 0; line-height: 1.5; border-bottom: 1px solid #f9f9f9; padding-bottom: 2px; }
+        .dato-linea b { color: #000; display: inline-block; min-width: 110px; }
+        
+        .link-ws { color: #25d366; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; }
+
+        .btn-copiar-azul { 
+            background: #007bff; color: white; border: none; padding: 12px; 
+            border-radius: 12px; font-size: 15px; cursor: pointer; 
+            font-weight: bold; width: 100%; margin-top: 15px;
+        }
+
+        .btn-renovar {
+            background: #0056b3; color: white; border: none; padding: 8px 12px;
+            border-radius: 8px; font-size: 13px; cursor: pointer;
+            font-weight: bold; margin-top: 10px; display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="seccion">
+    <h2>Base de Datos NETFLIX</h2>
+    <div class="campo"><label>Nombre del Cliente:</label><input type="text" id="f_nombre_persona" placeholder="Ej: Maria Lopez"></div>
+    <div class="campo"><label>Correo Electrónico:</label><input type="email" id="f_correo" placeholder="ejemplo@netflix.com"></div>
+    <div class="campo"><label>Perfil / Pantalla:</label><input type="text" id="f_perfil" placeholder="Ej: Pantalla 1 / Perfil Maria"></div>
+    <div class="campo"><label>PIN de Pantalla:</label><input type="number" id="f_pin" placeholder="0000"></div>
+    
+    <div class="grid-fechas">
+        <div class="campo"><label>Fecha Ingreso:</label><input type="date" id="f_ingreso" onchange="calcularCorte()"></div>
+        <div class="campo"><label>Fecha Corte:</label><input type="date" id="f_corte"></div>
+    </div>
+    
+    <div class="campo"><label>Celular Cliente:</label><input type="number" id="f_cel" placeholder="573001234567"></div>
+
+    <button class="btn-cargar" onclick="guardarCliente()">GUARDAR EN BASE DE DATOS</button>
+</div>
+
+<div class="contenedor-buscador">
+    <input type="text" id="buscadorBase" class="input-buscador" placeholder="Buscar por nombre, correo o perfil..." onkeyup="actualizarLista()">
+</div>
+
+<div class="tarjeta-contador">
+    <span id="contadorTotal" class="contador-numero">Total registros Netflix: 0</span>
+</div>
+
+<div id="listaMaestraClientes"></div>
+
+<script>
+    const LLAVE_ALMACENAMIENTO = 'base_netflix_streaming';
+
+    // FUNCIÓN PARA FORMATO DE FECHA LARGA (Ej: 10 mar 2026)
+    function formatoFechaLarga(fechaStr) {
+        if (!fechaStr) return "---";
+        const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+        const partes = fechaStr.split('-');
+        if (partes.length !== 3) return fechaStr;
+        return `${partes[2]} ${meses[parseInt(partes[1]) - 1]} ${partes[0]}`;
+    }
+
+    window.onload = function() {
+        const hoy = new Date().toISOString().split('T')[0];
+        document.getElementById('f_ingreso').value = hoy;
+        calcularCorte();
+        actualizarLista();
+    };
+
+    function calcularCorte() {
+        const ingreso = document.getElementById('f_ingreso').value;
+        if(ingreso) {
+            let fecha = new Date(ingreso + "T12:00:00");
+            fecha.setDate(fecha.getDate() + 30);
+            document.getElementById('f_corte').value = fecha.toISOString().split('T')[0];
+        }
+    }
+
+    function guardarCliente() {
+        const datos = {
+            id: Date.now(),
+            nombrePersona: document.getElementById('f_nombre_persona').value,
+            correo: document.getElementById('f_correo').value,
+            perfil: document.getElementById('f_perfil').value,
+            pin: document.getElementById('f_pin').value,
+            ingreso: document.getElementById('f_ingreso').value,
+            corte: document.getElementById('f_corte').value,
+            cel: document.getElementById('f_cel').value,
+            venceTimestamp: new Date(document.getElementById('f_corte').value + "T23:59:59").getTime()
+        };
+        if(!datos.correo || !datos.corte) return alert("Faltan datos importantes");
+        let base = JSON.parse(localStorage.getItem(LLAVE_ALMACENAMIENTO)) || [];
+        base.push(datos);
+        localStorage.setItem(LLAVE_ALMACENAMIENTO, JSON.stringify(base));
+        document.getElementById('f_nombre_persona').value = "";
+        document.getElementById('f_correo').value = "";
+        document.getElementById('f_perfil').value = "";
+        document.getElementById('f_pin').value = "";
+        document.getElementById('f_cel').value = "";
+        actualizarLista();
+        alert("¡Netflix guardado correctamente!");
+    }
+
+    function renovarCliente(id) {
+        let base = JSON.parse(localStorage.getItem(LLAVE_ALMACENAMIENTO)) || [];
+        const index = base.findIndex(x => x.id === id);
+        if(index !== -1) {
+            const nuevaFechaIngreso = new Date().toISOString().split('T')[0];
+            let fechaCorteObj = new Date(nuevaFechaIngreso + "T12:00:00");
+            fechaCorteObj.setDate(fechaCorteObj.getDate() + 30);
+            const nuevaFechaCorte = fechaCorteObj.toISOString().split('T')[0];
+            base[index].ingreso = nuevaFechaIngreso;
+            base[index].corte = nuevaFechaCorte;
+            base[index].venceTimestamp = new Date(nuevaFechaCorte + "T23:59:59").getTime();
+            localStorage.setItem(LLAVE_ALMACENAMIENTO, JSON.stringify(base));
+            actualizarLista();
+            alert("¡Netflix renovado por 30 días más!");
+        }
+    }
+
+    function actualizarLista() {
+        const filtro = document.getElementById('buscadorBase').value.toLowerCase();
+        const lista = document.getElementById('listaMaestraClientes');
+        const base = JSON.parse(localStorage.getItem(LLAVE_ALMACENAMIENTO)) || [];
+        const filtrados = base.filter(p => 
+            (p.nombrePersona && p.nombrePersona.toLowerCase().includes(filtro)) ||
+            p.correo.toLowerCase().includes(filtro) || 
+            (p.cel && p.cel.toString().includes(filtro)) || 
+            (p.perfil && p.perfil.toLowerCase().includes(filtro))
+        );
+        document.getElementById('contadorTotal').innerText = "Total registros Netflix: " + filtrados.length;
+        lista.innerHTML = filtrados.length ? "" : "<p style='text-align:center; color:gray;'>No hay registros en Netflix</p>";
+        const hoyMs = new Date().setHours(0,0,0,0);
+        filtrados.slice().reverse().forEach(p => {
+            const msRestantes = p.venceTimestamp - hoyMs;
+            const dias = Math.floor(msRestantes / 86400000);
+            let clase = "activa"; let textoE = "ACTIVA";
+            if (dias < 0) { clase = "vencida"; textoE = "VENCIDA"; }
+            else if (dias === 0) { clase = "vence-hoy"; textoE = "VENCE HOY"; }
+            else if (dias <= 3) { clase = "proxima"; textoE = "POR VENCER"; }
+            const wsLink = p.cel ? `https://wa.me/${p.cel.toString().replace(/\D/g,'')}` : "#";
+            
+            // FORMATEO DE FECHAS PARA LA VISTA
+            const fiLarga = formatoFechaLarga(p.ingreso);
+            const fcLarga = formatoFechaLarga(p.corte);
+
+            lista.innerHTML += `
+                <div class="seccion historial-separado ${clase}">
+                    <button class="btn-borrar" onclick="borrarUno(${p.id})">×</button>
+                    <span class="estado-texto" style="color:${clase==='activa'?'#2d9d96':''}${clase==='vencida'?'#e74c3c':''}${clase==='vence-hoy'?'#e67e22':''}${clase==='proxima'?'#f1c40f':''}">${textoE}</span>
+                    <div class="dato-linea" style="font-size:16px; color:#007bff;"><b>👤 Cliente:</b> ${p.nombrePersona || 'Sin Nombre'}</div>
+                    <div class="dato-linea"><b>📧 Correo:</b> ${p.correo}</div>
+                    <div class="dato-linea"><b>📺 Perfil:</b> ${p.perfil || 'No asignado'}</div>
+                    <div class="dato-linea"><b>📌 PIN:</b> ${p.pin || 'Sin PIN'}</div>
+                    <div class="dato-linea"><b>📥 Ingreso:</b> ${fiLarga}</div>
+                    <div class="dato-linea"><b>📤 Corte:</b> ${fcLarga}</div>
+                    <div class="dato-linea"><b>📞 Celular:</b> <a href="${wsLink}" target="_blank" class="link-ws">${p.cel || 'N/A'} 🟢</a></div>
+                    <div class="dato-linea" style="border:none; margin-top:5px; font-weight:bold;">⏳ Días restantes: ${dias}</div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn-renovar" onclick="renovarCliente(${p.id})">🔄 Renovar 30 días</button>
+                    </div>
+                    <button class="btn-copiar-azul" onclick="copiarTodo(\`${p.correo}\`,\`${p.perfil}\`,\`${p.pin}\`,\`${fiLarga}\`,\`${fcLarga}\`)">Copiar Datos de Acceso</button>
+                </div>`;
+        });
+    }
+
+    function copiarTodo(c, pf, pin, fi, fc) {
+        const texto = `*DATOS DE ACCESO NETFLIX*\n\n📧 *Correo:*\n${c}\n👤 *Perfil:* ${pf}\n📌 *PIN:* ${pin}\n\n📥 *Fecha Ingreso:* ${fi}\n📅 *Fecha Corte:* ${fc}`;
+        const el = document.createElement('textarea'); el.value = texto; document.body.appendChild(el); el.select();
+        document.execCommand('copy'); document.body.removeChild(el); alert("¡Datos de acceso copiados!");
+    }
+
+    function borrarUno(id) { if(confirm("¿Eliminar este registro?")) { let base = JSON.parse(localStorage.getItem(LLAVE_ALMACENAMIENTO)) || []; base = base.filter(x => x.id !== id); localStorage.setItem(LLAVE_ALMACENAMIENTO, JSON.stringify(base)); actualizarLista(); } }
+</script>
+</body>
+</html>
