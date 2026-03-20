@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Maestro Global - Pro</title>
+    <style>
+        body { background-color: #f0f2f5; font-family: sans-serif; padding: 10px; margin: 0; padding-bottom: 50px; }
+        .contenedor { max-width: 550px; margin: 0 auto; }
+        
+        /* CALENDARIO - AHORA ARRIBA */
+        .calendario-card { background: white; padding: 15px; border-radius: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 15px; text-align: center; }
+        .cal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: bold; font-size: 18px; }
+        .btn-cal { background: #eee; border: none; padding: 10px; border-radius: 10px; cursor: pointer; font-size: 18px; }
+        .dias-semana { display: grid; grid-template-columns: repeat(7, 1fr); font-size: 12px; color: #999; margin-bottom: 5px; }
+        .dias-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+        .dia { padding: 10px 0; border-radius: 10px; cursor: pointer; font-size: 14px; position: relative; }
+        .dia:hover { background: #f0f7ff; }
+        .dia.hoy { background: #007bff; color: white; font-weight: bold; }
+        .dia.seleccionado { border: 2px solid #007bff; color: #007bff; font-weight: bold; }
+        .tiene-vencimiento::after { content: ''; position: absolute; bottom: 3px; left: 50%; transform: translateX(-50%); width: 4px; height: 4px; background: #e74c3c; border-radius: 50%; }
+
+        /* BUSCADOR - AHORA DEBAJO DEL CALENDARIO */
+        .seccion-busqueda { background: white; padding: 15px; border-radius: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .input-busqueda { width: 100%; padding: 12px; border: 2px solid #007bff; border-radius: 10px; outline: none; box-sizing: border-box; font-size: 16px; }
+
+        /* TARJETAS */
+        .item-recordatorio { background: white; border-radius: 12px; padding: 15px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); position: relative; border-left: 8px solid #ccc; }
+        .vence-hoy { border-left-color: #dc2626 !important; background: #fffafb; }
+        .vence-futuro { border-left-color: #007bff !important; }
+
+        .badge { font-size: 10px; padding: 3px 8px; border-radius: 20px; font-weight: bold; position: absolute; right: 40px; top: 15px; text-transform: uppercase; }
+        .badge-hoy { background: #dc2626; color: white; }
+        .badge-futuro { background: #007bff; color: white; }
+
+        .info-cuenta { font-size: 14px; color: #333; line-height: 1.6; }
+        .cliente-nombre { color: #007bff; font-size: 16px; font-weight: bold; display: block; margin-bottom: 5px; }
+        .btn-ws { display: inline-block; margin-top: 10px; padding: 8px 15px; background: #25d366; color: white; text-decoration: none; border-radius: 8px; font-size: 13px; font-weight: bold; }
+        .btn-copiar { display: inline-block; margin-top: 10px; padding: 8px 15px; background: #007bff; color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: bold; cursor: pointer; }
+        .btn-eliminar-tarjeta { position: absolute; top: 10px; right: 10px; background: none; border: none; color: #ff4d4d; font-size: 20px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+<div class="contenedor">
+    <div class="calendario-card">
+        <div class="cal-header">
+            <button class="btn-cal" onclick="cambiarMes(-1)">◀</button>
+            <span id="mesAno">Marzo 2026</span>
+            <button class="btn-cal" onclick="cambiarMes(1)">▶</button>
+        </div>
+        <div class="dias-semana">
+            <div>Lu</div><div>Ma</div><div>Mi</div><div>Ju</div><div>Vi</div><div>Sa</div><div>Do</div>
+        </div>
+        <div id="diasGrid" class="dias-grid"></div>
+    </div>
+
+    <div class="seccion-busqueda">
+        <input type="text" id="buscadoGlobal" class="input-busqueda" placeholder="Buscar por PIN, Plataforma, Nombre o Correo..." onkeyup="buscarManual()">
+    </div>
+
+    <div id="tituloLista" style="font-weight: bold; color: #555; margin-bottom: 10px; padding-left: 5px;">Vencimientos del día:</div>
+    <div id="listaRecordatorios"></div>
+</div>
+
+<script>
+    // LISTA MAESTRA ACTUALIZADA CON WIN SPORT
+    const LLAVES_SISTEMA = [
+        'base_netflix_jose_final', 'base_hbo_max_streaming', 'base_disney_streaming',
+        'base_disney_espn_streaming', 'base_prime_video_streaming', 'base_netflix_streaming', 
+        'base_paramount_streaming', 'base_crunchyroll_streaming', 'base_vix_streaming', 'base_plex_streaming_db',
+        'CUENTAS_WIN_HISTO'
+    ];
+
+    let fechaActual = new Date();
+    let fechaSeleccionada = new Date();
+    fechaSeleccionada.setHours(0,0,0,0);
+
+    const meses = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+
+    function formatoFechaLargo(fechaStr) {
+        if (!fechaStr) return "---";
+        const m = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+        
+        // Detectar si la fecha usa '-' o '/' (Win Sport usa '/')
+        let p;
+        if (fechaStr.includes('-')) {
+            p = fechaStr.split('-');
+            return `${parseInt(p[2])} ${m[parseInt(p[1]) - 1]} ${p[0]}`;
+        } else {
+            p = fechaStr.split('/');
+            return `${parseInt(p[0])} ${m[parseInt(p[1]) - 1]} ${p[2]}`;
+        }
+    }
+
+    function cambiarMes(dir) {
+        fechaActual.setMonth(fechaActual.getMonth() + dir);
+        renderizarCalendario();
+    }
+
+    function renderizarCalendario() {
+        const grid = document.getElementById('diasGrid');
+        const mesAno = document.getElementById('mesAno');
+        grid.innerHTML = '';
+        mesAno.innerText = `${meses[fechaActual.getMonth()]} ${fechaActual.getFullYear()}`;
+
+        let primerDia = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1).getDay();
+        primerDia = (primerDia === 0) ? 6 : primerDia - 1; 
+        const diasMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0).getDate();
+
+        let todos = [];
+        LLAVES_SISTEMA.forEach(l => {
+            const d = JSON.parse(localStorage.getItem(l)) || [];
+            if(Array.isArray(d)) todos = todos.concat(d);
+        });
+
+        for (let i = 0; i < primerDia; i++) { grid.innerHTML += '<div></div>'; }
+
+        for (let d = 1; d <= diasMes; d++) {
+            const fechaD = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), d);
+            fechaD.setHours(0,0,0,0);
+            const hoy = new Date(); hoy.setHours(0,0,0,0);
+            let clase = "dia";
+            if(fechaD.getTime() === hoy.getTime()) clase += " hoy";
+            if(fechaD.getTime() === fechaSeleccionada.getTime()) clase += " seleccionado";
+
+            const tiene = todos.some(c => {
+                const fechaCorteRaw = c.corte || c.fechaCorte;
+                if(!fechaCorteRaw) return false;
+                
+                let fc;
+                if(fechaCorteRaw.includes('-')) {
+                    fc = new Date(fechaCorteRaw + "T12:00:00");
+                } else {
+                    const partes = fechaCorteRaw.split('/');
+                    fc = new Date(partes[2], partes[1] - 1, partes[0], 12, 0, 0);
+                }
+                fc.setHours(0,0,0,0);
+                return fc.getTime() === fechaD.getTime();
+            });
+            if(tiene) clase += " tiene-vencimiento";
+            grid.innerHTML += `<div class="${clase}" onclick="seleccionarFecha(${fechaD.getTime()})">${d}</div>`;
+        }
+    }
+
+    function seleccionarFecha(ts) {
+        fechaSeleccionada = new Date(ts);
+        document.getElementById('buscadoGlobal').value = ""; 
+        renderizarCalendario();
+        cargarLista("calendario");
+    }
+
+    function buscarManual() {
+        const filtro = document.getElementById('buscadoGlobal').value.toLowerCase();
+        if(filtro.length > 0) {
+            cargarLista("busqueda", filtro);
+        } else {
+            cargarLista("calendario");
+        }
+    }
+
+    function cargarLista(modo, filtro = "") {
+        const contenedor = document.getElementById('listaRecordatorios');
+        const titulo = document.getElementById('tituloLista');
+        let todas = [];
+        
+        LLAVES_SISTEMA.forEach(l => {
+            const d = JSON.parse(localStorage.getItem(l)) || [];
+            if (Array.isArray(d)) {
+                d.forEach(item => { 
+                    item.llaveOriginal = l; 
+                    item.nombrePlataformaUI = l.replace('base_', '').replace('_streaming', '').replace('CUENTAS_', '').replace('_HISTO', '').replace('_', ' ').toUpperCase();
+                    todas.push(item); 
+                });
+            }
+        });
+
+        let filtradas = [];
+        if(modo === "calendario") {
+            titulo.innerText = "Vencimientos del: " + fechaSeleccionada.toLocaleDateString();
+            filtradas = todas.filter(c => {
+                const fechaCorteRaw = c.corte || c.fechaCorte;
+                if(!fechaCorteRaw) return false;
+
+                let fc;
+                if(fechaCorteRaw.includes('-')) {
+                    fc = new Date(fechaCorteRaw + "T12:00:00");
+                } else {
+                    const partes = fechaCorteRaw.split('/');
+                    fc = new Date(partes[2], partes[1] - 1, partes[0], 12, 0, 0);
+                }
+                fc.setHours(0,0,0,0);
+                return fc.getTime() === fechaSeleccionada.getTime();
+            });
+        } else {
+            titulo.innerText = "Resultados de búsqueda:";
+            filtradas = todas.filter(p => 
+                (p.nombrePersona && p.nombrePersona.toLowerCase().includes(filtro)) ||
+                (p.correo && p.correo.toLowerCase().includes(filtro)) ||
+                (p.perfil && p.perfil.toLowerCase().includes(filtro)) ||
+                (p.nombre && p.nombre.toLowerCase().includes(filtro)) ||
+                (p.pin && p.pin.toString().includes(filtro)) ||
+                (p.nombrePlataformaUI && p.nombrePlataformaUI.toLowerCase().includes(filtro))
+            );
+        }
+
+        contenedor.innerHTML = filtradas.length ? "" : "<p style='text-align:center; color:gray; padding:20px;'>No se encontraron registros.</p>";
+
+        filtradas.forEach(p => {
+            const fechaCorteRaw = p.corte || p.fechaCorte;
+            const fechaIngresoRaw = p.ingreso || p.fechaIngreso;
+
+            let fc;
+            if(fechaCorteRaw.includes('-')) {
+                fc = new Date(fechaCorteRaw + "T12:00:00");
+            } else {
+                const partes = fechaCorteRaw.split('/');
+                fc = new Date(partes[2], partes[1] - 1, partes[0], 12, 0, 0);
+            }
+            fc.setHours(0,0,0,0);
+
+            const hoy = new Date(); hoy.setHours(0,0,0,0);
+            const esHoy = fc.getTime() === hoy.getTime();
+            const wsLink = p.cel ? `https://wa.me/${p.cel.toString().replace(/\D/g,'')}` : "#";
+
+            contenedor.innerHTML += `
+                <div class="item-recordatorio ${esHoy ? 'vence-hoy' : 'vence-futuro'}">
+                    <button class="btn-eliminar-tarjeta" onclick="confirmarEliminar('${p.llaveOriginal}', ${p.id})">×</button>
+                    <span class="badge ${esHoy ? 'badge-hoy' : 'badge-futuro'}">${esHoy ? 'VENCE HOY' : 'VENCE: ' + fechaCorteRaw}</span>
+                    <span class="cliente-nombre">👤 ${p.nombrePersona || p.nombre || 'Sin Nombre'}</span>
+                    <div class="info-cuenta">
+                        <b>📍 Plataforma:</b> ${p.nombrePlataformaUI}<br>
+                        <b>📧 Correo:</b> ${p.correo}<br>
+                        ${p.perfil ? `<b>📺 Perfil:</b> ${p.perfil}<br>` : ''}
+                        ${p.pin ? `<b>📌 PIN:</b> ${p.pin}<br>` : ''}
+                        <b>📥 Ingreso:</b> ${formatoFechaLargo(fechaIngresoRaw)}<br>
+                        <b>📤 Corte:</b> ${formatoFechaLargo(fechaCorteRaw)}
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="${wsLink}" target="_blank" class="btn-ws">WhatsApp 🟢</a>
+                        <button class="btn-copiar" onclick="copiarAviso('${p.correo}', '${fechaCorteRaw}', '${p.nombrePlataformaUI}', '${p.perfil || 'N/A'}', '${p.pin || 'N/A'}')">Copiar Aviso</button>
+                    </div>
+                </div>`;
+        });
+    }
+
+    function confirmarEliminar(llave, id) {
+        if (confirm("⚠️ ¿Eliminar de la base original?")) {
+            let b = JSON.parse(localStorage.getItem(llave)) || [];
+            b = b.filter(x => x.id !== id);
+            localStorage.setItem(llave, JSON.stringify(b));
+            renderizarCalendario();
+            buscarManual();
+        }
+    }
+
+    function copiarAviso(correo, corte, plataforma, perfil, pin) {
+        const texto = `*AVISO DE COBRO ${plataforma}*\n\nTu servicio asociado al correo:\n📧 ${correo}\n${perfil !== 'N/A' ? `👤 *Perfil:* ${perfil}\n` : ''}${pin !== 'N/A' ? `📌 *PIN:* ${pin}\n` : ''}\nVence el día: *${formatoFechaLargo(corte)}*.\n\nQuedamos atentos a tu renovación. 🟢`;
+        const el = document.createElement('textarea'); el.value = texto; document.body.appendChild(el); el.select();
+        document.execCommand('copy'); document.body.removeChild(el); alert("¡Aviso copiado!");
+    }
+
+    window.onload = () => { renderizarCalendario(); cargarLista("calendario"); };
+</script>
+</body>
+</html>
