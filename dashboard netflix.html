@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Pantallas Pro - Dinámica</title>
+    <style>
+        body { background-color: #f0f2f5; font-family: sans-serif; padding: 20px 10px; margin: 0; padding-bottom: 50px; }
+        .seccion { background: white; max-width: 550px; margin: 0 auto 20px auto; padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+        h2 { margin-top: 0; color: #333; font-size: 19px; text-align: center; text-transform: uppercase; }
+        
+        .contenedor-buscador { max-width: 550px; margin: 25px auto 15px auto; position: sticky; top: 10px; z-index: 100; }
+        .input-buscador { 
+            width: 100%; padding: 15px 15px 15px 45px; border: 2px solid #007bff; border-radius: 30px; font-size: 16px; outline: none; 
+            box-shadow: 0 4px 12px rgba(0,123,255,0.2);
+            background: white url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="%23007bff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" cy="21" x2="16.65" y2="16.65"></line></svg>') no-repeat 15px center;
+        }
+
+        .tarjeta-contador { background: #eef2f7; margin: 20px auto; padding: 15px; border-radius: 12px; border: 2px solid #007bff; max-width: 550px; text-align: center; }
+        .contador-numero { font-size: 24px; font-weight: bold; color: #007bff; display: block; }
+
+        .campo { margin-bottom: 12px; text-align: left; }
+        label { display: block; font-weight: bold; margin-bottom: 4px; font-size: 13px; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; }
+        
+        .grid-pantallas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; background: #f9f9f9; padding: 12px; border-radius: 10px; margin-top: 10px; border: 1px solid #ddd; }
+        .titulo-p { grid-column: span 2; font-size: 11px; font-weight: bold; color: #007bff; }
+
+        .btn-cargar { width: 100%; padding: 15px; background-color: #000; color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 15px; }
+
+        .historial-separado { 
+            background: #fff; border-radius: 12px; padding: 18px; margin-bottom: 15px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.08); border-left: 10px solid #ccc; 
+            text-align: left; position: relative; 
+        }
+        .btn-borrar { position: absolute; right: 12px; top: 12px; color: #ff4d4d; background: none; border: none; cursor: pointer; font-size: 20px; font-weight: bold; }
+        
+        .vencida { border-left-color: #e74c3c !important; }
+        .vence-hoy { border-left-color: #e67e22 !important; }
+        .proxima { border-left-color: #f1c40f !important; }
+        .activa { border-left-color: #2d9d96 !important; }
+
+        .estado-texto { font-weight: bold; font-size: 11px; text-transform: uppercase; display: block; margin-bottom: 10px; }
+        .dato-linea { font-size: 14px; color: #333; margin: 5px 0; line-height: 1.5; }
+        .dato-linea b { color: #000; display: inline-block; min-width: 100px; }
+
+        .btn-copiar-azul { 
+            background: #007bff; color: white; border: none; padding: 12px; 
+            border-radius: 12px; font-size: 15px; cursor: pointer; 
+            font-weight: bold; width: 100%; margin-top: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="seccion">
+    <h2>Cargar Cuenta (5 Pantallas)</h2>
+    <div class="campo"><label>Correo Principal:</label><input type="email" id="m_correo" placeholder="cuenta@streaming.com"></div>
+    <div class="campo"><label>Contraseña:</label><input type="text" id="m_pass" placeholder="Pass123"></div>
+    <div id="inputsPantallas"></div>
+    <button class="btn-cargar" onclick="subirPantallas()">SUBIR A DISPONIBLES</button>
+</div>
+
+<div class="seccion" style="border: 2px solid #2d9d96; background: #e8f6f5;">
+    <h2 style="color: #2d9d96;">Dashboard: Disponibles</h2>
+    <div id="listaDisponibles"></div>
+</div>
+
+<div class="contenedor-buscador">
+    <input type="text" id="buscadorPantallas" class="input-buscador" placeholder="Buscar por correo, PIN, pantalla..." onkeyup="actualizarTodo()">
+</div>
+
+<div class="tarjeta-contador">
+    <span style="color: #555; font-weight: bold; font-size: 14px;">RESUMEN DE INVENTARIO (ENTREGAS)</span>
+    <span id="contadorTotal" class="contador-numero">Pantallas entregadas: 0</span>
+</div>
+
+<div class="seccion">
+    <h2 style="color: #444;">Base de Pantallas Entregadas</h2>
+    <div id="baseDatosPantallas"></div>
+</div>
+
+<script>
+    const LLAVES_SISTEMA = [
+        'base_hbo_max_streaming',
+        'base_disney_streaming',
+        'base_disney_espn_streaming',
+        'base_prime_video_streaming',
+        'base_netflix_jose_final',
+        'dash_disponibles_p',
+        'base_datos_pantallas'
+    ];
+
+    const divInputs = document.getElementById('inputsPantallas');
+    for(let i=1; i<=5; i++) {
+        divInputs.innerHTML += `<div class="grid-pantallas"><div class="titulo-p">DATOS PANTALLA ${i}</div><div class="campo"><label>Nombre:</label><input type="text" id="n${i}" placeholder="Perfil ${i}"></div><div class="campo"><label>PIN:</label><input type="number" id="pin${i}" placeholder="0000"></div></div>`;
+    }
+
+    function getHoyLocal() {
+        const d = new Date();
+        const offset = d.getTimezoneOffset() * 60000;
+        const local = new Date(d.getTime() - offset);
+        return local.toISOString().split('T')[0];
+    }
+
+    function formatoLargo(fechaStr) {
+        if (!fechaStr) return "---";
+        const meses = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+        const partes = fechaStr.split('/');
+        if (partes.length === 3) {
+            return `${parseInt(partes[0])} ${meses[parseInt(partes[1]) - 1]} ${partes[2]}`;
+        }
+        return fechaStr;
+    }
+
+    window.onload = actualizarTodo;
+
+    function subirPantallas() {
+        const correo = document.getElementById('m_correo').value;
+        const pass = document.getElementById('m_pass').value;
+        if(!correo || !pass) return alert("Faltan datos");
+        let disponibles = JSON.parse(localStorage.getItem('dash_disponibles_p')) || [];
+        for(let i=1; i<=5; i++) {
+            const nombre = document.getElementById(`n${i}`).value;
+            const pin = document.getElementById(`pin${i}`).value;
+            if(nombre && pin) disponibles.push({ id: Date.now() + i, correo, pass, nombre, pin });
+        }
+        localStorage.setItem('dash_disponibles_p', JSON.stringify(disponibles));
+        actualizarTodo();
+    }
+
+    function entregar(id) {
+        let disponibles = JSON.parse(localStorage.getItem('dash_disponibles_p')) || [];
+        const p = disponibles.find(x => x.id === id);
+        if(p) {
+            disponibles = disponibles.filter(x => x.id !== id);
+            localStorage.setItem('dash_disponibles_p', JSON.stringify(disponibles));
+            
+            const hoy = new Date();
+            const hoyMedianoche = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate());
+            const vencimiento = new Date(hoyMedianoche.getTime() + (30 * 24 * 60 * 60 * 1000));
+            
+            let baseNueva = JSON.parse(localStorage.getItem('base_datos_pantallas')) || [];
+            baseNueva.push({ 
+                ...p, 
+                fechaIngreso: hoy.toLocaleDateString('es-ES'), 
+                fechaCorte: vencimiento.toLocaleDateString('es-ES'), 
+                venceTimestamp: vencimiento.getTime() 
+            });
+            localStorage.setItem('base_datos_pantallas', JSON.stringify(baseNueva));
+            actualizarTodo();
+        }
+    }
+
+    function borrarRegistro(id) {
+        if(confirm("¿Eliminar?")) {
+            let base = JSON.parse(localStorage.getItem(LLAVES_SISTEMA[6])) || [];
+            base = base.filter(x => x.id !== id);
+            localStorage.setItem(LLAVES_SISTEMA[6], JSON.stringify(base));
+            actualizarTodo();
+        }
+    }
+
+    function actualizarTodo() {
+        const filtro = document.getElementById('buscadorPantallas').value.toLowerCase();
+        const listaD = document.getElementById('listaDisponibles');
+        const dash = JSON.parse(localStorage.getItem(LLAVES_SISTEMA[5])) || [];
+        listaD.innerHTML = dash.length ? "" : "<p style='color:gray; font-size:12px; text-align:center;'>Sin pantallas pendientes</p>";
+        dash.forEach(p => {
+            listaD.innerHTML += `<div style="background:#fff; border:2px solid #2d9d96; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;"><div style="text-align:left"><b>${p.nombre}</b><br><small>${p.correo}</small></div><button style="background:#2d9d96; color:white; border:none; padding:10px 15px; border-radius:8px; font-weight:bold; cursor:pointer;" onclick="entregar(${p.id})">ENTREGAR</button></div>`;
+        });
+
+        const listaB = document.getElementById('baseDatosPantallas');
+        const contadorTxt = document.getElementById('contadorTotal');
+        const base = JSON.parse(localStorage.getItem(LLAVES_SISTEMA[6])) || [];
+        const filtrados = base.filter(p => p.correo.toLowerCase().includes(filtro) || p.nombre.toLowerCase().includes(filtro) || p.pin.toString().includes(filtro));
+        contadorTxt.innerText = "Pantallas entregadas: " + filtrados.length;
+        listaB.innerHTML = filtrados.length ? "" : "<p style='color:gray; font-size:12px; text-align:center;'>No hay resultados</p>";
+        
+        const hoyMs = new Date().setHours(0,0,0,0);
+
+        filtrados.slice().reverse().forEach(p => {
+            const msRestantes = p.venceTimestamp - hoyMs;
+            const diasRestantes = Math.floor(msRestantes / 86400000);
+            let clase = "activa"; let textoE = "ACTIVA";
+            if (diasRestantes < 0) { clase = "vencida"; textoE = "VENCIDA"; }
+            else if (diasRestantes === 0) { clase = "vence-hoy"; textoE = "VENCE HOY"; }
+            else if (diasRestantes <= 3) { clase = "proxima"; textoE = "PRÓXIMA A VENCER"; }
+
+            const fiLarga = formatoLargo(p.fechaIngreso);
+            const fcLarga = formatoLargo(p.fechaCorte);
+
+            listaB.innerHTML += `<div class="historial-separado ${clase}">
+                <button class="btn-borrar" onclick="borrarRegistro(${p.id})">×</button>
+                <span class="estado-texto">${textoE}</span>
+                <div class="dato-linea"><b>Correo:</b> ${p.correo}</div>
+                <div class="dato-linea"><b>Pass:</b> ${p.pass}</div>
+                <div class="dato-linea"><b>Pantalla:</b> ${p.nombre}</div>
+                <div class="dato-linea"><b>PIN:</b> ${p.pin}</div>
+                <div class="dato-linea" style="border-top: 1px solid #eee; padding-top:10px; margin-top:10px;"><b>Fecha Ingreso:</b> ${fiLarga}</div>
+                <div class="dato-linea"><b>Fecha Corte:</b> ${fcLarga}</div>
+                <div class="dato-linea"><b>Días restantes:</b> ${diasRestantes}</div>
+                <button class="btn-copiar-azul" onclick="copiarAcceso('${p.correo}','${p.pass}','${p.nombre}','${p.pin}','${fiLarga}','${fcLarga}')">Copiar Datos de Acceso</button>
+            </div>`;
+        });
+    }
+
+    function copiarAcceso(c, ps, n, pn, fi, f) {
+        const texto = `*DATOS DE ACCESO NETFLIX*\n\n📧 *Correo:*\n${c}\n🔑 *Pass:* ${ps}\n📺 *Pantalla:* ${n}\n📌 *PIN:* ${pn}\n\n📥 *Fecha Ingreso:* ${fi}\n📅 *Fecha Corte:* ${f}`;
+        const el = document.createElement('textarea');
+        el.value = texto; document.body.appendChild(el); el.select();
+        document.execCommand('copy'); document.body.removeChild(el);
+        alert("¡Datos de Netflix copiados con formato!");
+    }
+
+    function borrarTodaLaBase() { if(confirm("¿Borrar historial de esta Dashboard?")) { localStorage.removeItem(LLAVES_SISTEMA[5]); localStorage.removeItem(LLAVES_SISTEMA[6]); actualizarTodo(); } }
+</script>
+</body>
+</html>
